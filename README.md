@@ -4,6 +4,18 @@
 
 A fresh FRAME-based [Substrate](https://www.substrate.io/) node, ready for hacking :rocket:
 
+## Resource
+
+- https://substrate.recipes/storage-maps.html
+
+## Run the node binary with the RUST_LOG environment variable to print the values.
+
+```
+./target/debug/node-template purge-chain --dev
+RUST_LOG=runtime=debug ./target/debug/node-template --dev
+
+```
+
 ## Getting Started
 
 Follow the steps below to get started with the Node Template, or get it up and running right from
