@@ -54,9 +54,19 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn is_init)]
-	// Learn more about declaring storage items:
-	// https://docs.substrate.io/v3/runtime/storage#declaring-storage-items
 	pub type IsInit<T: Config> = StorageValue<_, bool, ValueQuery>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn allowance)]
+	pub type Allowance<T: Config> = StorageDoubleMap<
+		_,
+		Blake2_128Concat,
+		T::AccountId,
+		Blake2_128Concat,
+		T::AccountId,
+		u64,
+		ValueQuery
+	>;
 
 	// Pallets use events to inform users when important changes are made.
 	// https://docs.substrate.io/v3/runtime/events-and-errors
@@ -87,6 +97,8 @@ pub mod pallet {
 		AlreadyInitialized,
 
 		InsufficientFunds,
+
+		InsufficientApprovedFunds
 	}
 
 	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
@@ -137,7 +149,7 @@ pub mod pallet {
 
         	let sender = ensure_signed(origin)?;
         	ensure!(!Self::is_init(), <Error<T>>::AlreadyInitialized);
-			//warn!("Request sent by----->: {:?}", Self::is_init());
+			warn!("Request sent by----->: {:?}", Self::is_init());
         	<TotalSupply<T>>::put(total_supply);
         	<BalanceOf<T>>::insert(&sender, total_supply);
 
@@ -163,6 +175,45 @@ pub mod pallet {
 			<BalanceOf<T>>::insert(&to, updated_to_balance);
 
 			Self::deposit_event(Event::Transfer(sender, to, value));
+
+			Ok(().into())
+		}
+		#[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,2))]
+        pub fn approve(origin: OriginFor<T>, spender: T::AccountId, value: u64) -> DispatchResult {
+        	let owner = ensure_signed(origin)?;
+
+			<Allowance<T>>::insert(&owner, &spender, value);
+
+			Self::deposit_event(Event::Transfer(owner, spender, value));
+
+			Ok(().into())
+		}
+
+		#[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,2))]
+        pub fn transfer_from(origin: OriginFor<T>, owner: T::AccountId,to: T::AccountId, value: u64) -> DispatchResult {
+
+        	let spender = ensure_signed(origin)?;
+
+			// get the balance values
+			let owner_balance = Self::balance_of(&owner);
+			let to_balance = Self::balance_of(&to);
+
+			// get the allowance value
+			let approved_balance = Self::allowance(&owner, &spender);
+
+			// Calculate new balances
+			let updated_approved_balance = approved_balance.checked_sub(value).ok_or(<Error<T>>::InsufficientApprovedFunds)?;
+			let updated_owner_balance = owner_balance.checked_sub(value).ok_or(<Error<T>>::InsufficientFunds)?;
+			let updated_to_balance = to_balance.checked_add(value).expect("Entire supply fits in u64; qed");
+
+			// Write new balances to storage
+			<BalanceOf<T>>::insert(&owner, updated_owner_balance);
+			<BalanceOf<T>>::insert(&to, updated_to_balance);
+
+			// Write new allowance to storage
+			<Allowance<T>>::insert(&owner, &spender, updated_approved_balance);
+
+			Self::deposit_event(Event::Transfer(owner, to, value));
 
 			Ok(().into())
 		}
